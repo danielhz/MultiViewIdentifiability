@@ -1,0 +1,48 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "name": "MultiViewIdentifiability",
+  "description": "A Lean 4 formalization of query identifiability under view-based observation: identifiability as query determinacy by overlap-projection views, a functional-dependency closure certificate, and information-theoretic and robustness consequences.",
+  "version": "0.1.0",
+  "dateModified": "2026-06-23",
+  "license": "https://spdx.org/licenses/Apache-2.0",
+  "codeRepository": "https://github.com/danielhz/MultiViewIdentifiability",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "Lean",
+    "version": "4.30.0"
+  },
+  "runtimePlatform": "Lean 4",
+  "keywords": [
+    "Lean 4",
+    "formal verification",
+    "query identifiability",
+    "query determinacy",
+    "functional dependencies",
+    "conjunctive queries"
+  ],
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Ratan Bahadur",
+      "familyName": "Thapa"
+    },
+    {
+      "@type": "Person",
+      "givenName": "Daniel",
+      "familyName": "Hernández"
+    }
+  ],
+  "softwareRequirements": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Lean",
+      "version": "4.30.0"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Mathlib",
+      "version": "v4.30.0"
+    }
+  ]
+}

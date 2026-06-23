@@ -1,0 +1,19 @@
+name = "MultiViewIdentifiability"
+version = "0.1.0"
+keywords = ["databases", "query-identifiability", "functional-dependencies"]
+defaultTargets = ["MultiViewIdentifiability"]
+
+# Mathlib pinned to the release matching lean-toolchain v4.30.0.
+# The existing structural proofs remain Mathlib-free; Mathlib is imported only in
+# modules that need real analysis / measure theory / Finset cardinality.
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+rev = "v4.30.0"
+
+[leanOptions]
+pp.unicode.fun = true
+
+[[lean_lib]]
+name = "MultiViewIdentifiability"

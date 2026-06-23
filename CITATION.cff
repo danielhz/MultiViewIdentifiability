@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "MultiViewIdentifiability: a Lean 4 formalization of query identifiability under view-based observation"
+abstract: >-
+  A Lean 4 formalization of query identifiability under view-based observation:
+  identifiability as query determinacy by overlap-projection views, a sound
+  functional-dependency closure certificate, and information-theoretic and robustness
+  consequences (minimax error floor, robust Jensen–Shannon threshold, Fano's inequality,
+  representation-capacity bounds).
+type: software
+authors:
+  - family-names: Thapa
+    given-names: "Ratan Bahadur"
+  - family-names: Hernández
+    given-names: Daniel
+version: "0.1.0"
+date-released: "2026-06-23"
+license: Apache-2.0
+repository-code: "https://github.com/danielhz/MultiViewIdentifiability"
+url: "https://github.com/danielhz/MultiViewIdentifiability"
+keywords:
+  - "Lean 4"
+  - "formal verification"
+  - "interactive theorem proving"
+  - "query identifiability"
+  - "query determinacy"
+  - "functional dependencies"
+  - "conjunctive queries"
