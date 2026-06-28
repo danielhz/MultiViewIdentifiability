@@ -1,0 +1,636 @@
+\documentclass[11pt]{article}
+
+% ============================================================================
+%  Companion report for the MultiViewIdentifiability Lean 4 development.
+%  Standalone: describes the mechanised results with human-readable proofs and,
+%  for each, a pointer to the corresponding Lean declaration. Notation mirrors
+%  the mathematical terminology of the accompanying theory.
+% ============================================================================
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black,
+            citecolor=blue!55!black]{hyperref}
+
+% ---- notation (mirrors the theory's terminology) ----
+\newcommand{\att}[1]{\mathit{att}(#1)}
+\newcommand{\cq}{CQ}
+\newcommand{\W}{\mathcal{W}}                 % legal worlds
+\newcommand{\Ov}{\Omega}                     % designated overlaps
+\newcommand{\clo}[1]{{#1}^{+}_{\Sigma}}      % FD closure under the interface laws Sigma
+\newcommand{\aug}[1]{\widetilde{#1}}         % closure-augmented overlap
+\newcommand{\ObsFam}{\Gamma}                 % observable family
+\newcommand{\Obs}{\operatorname{Obs}}        % observation map
+\newcommand{\proj}[2]{#1{\restriction}#2}    % w restricted to X  (w|_X)
+\newcommand{\JS}{\operatorname{JS}}
+\newcommand{\KL}{\operatorname{KL}}
+\newcommand{\binent}{H_{\mathrm b}}          % binary entropy
+\newcommand{\nml}{\operatorname{nml}}        % negMulLog: x |-> -x log x
+\newcommand{\lean}[1]{\texttt{#1}}           % Lean identifiers
+\DeclareMathOperator*{\bigland}{\textstyle\bigwedge}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{proposition}[theorem]{Proposition}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+% "In Lean" pointer block
+\newcommand{\inlean}[1]{\par\smallskip\noindent%
+  {\small\textcolor{blue!50!black}{$\vdash$ \textbf{In Lean.}}~#1}\par\smallskip}
+
+\title{\textbf{Machine-Checked Query Identifiability\\ from Multi-View Interfaces}\\[4pt]
+       \large A companion report for the \texttt{MultiViewIdentifiability} Lean~4 development}
+\author{Ratan Bahadur Thapa \and Daniel Hern\'andez}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report is a human-readable companion to the \texttt{MultiViewIdentifiability} Lean~4
+development. For each formalised result it gives the statement in ordinary mathematical
+language, a proof written for a human reader, and a pointer ($\vdash$~\textbf{In Lean}) to the
+machine-checked declaration. The development studies when the answer to a conjunctive query is
+determined by what a multi-view interface observes about a relational world, and derives a
+closure certificate, a determinacy characterisation, and information-theoretic and robustness
+consequences. Everything stated here is machine-checked with no \texttt{sorry} except where a
+result is explicitly flagged \emph{open}.
+\end{abstract}
+
+\section*{How to read this report}
+\addcontentsline{toc}{section}{How to read this report}
+
+The Lean sources are organised module by module; this report follows the dependency spine:
+the model, functional-dependency closure, the certificates, the determinacy characterisation,
+and the quantitative (minimax, robustness, information-theoretic) results. You do \emph{not}
+need to build or run Lean to read it. To browse the mechanised statements with hyperlinked
+types, see the generated API documentation
+(\url{https://danielhz.github.io/MultiViewIdentifiability/}); to re-check the proofs, see the
+build instructions in \texttt{README.md} (\texttt{lake exe cache get \&\& lake build}). A
+declaration-by-declaration index appears in Appendix~\ref{app:index}.
+
+\paragraph{A note on the modelling (read this first).}
+Throughout, a query is represented \emph{semantically}: by its answer map together with the
+invariant that the answer depends only on the relevant projections of the world (its
+\emph{footprint}, or, for the atom-wise results, its per-atom schemas). This is the Lean
+fields \lean{BoolCQ.faithful}, \lean{AtomCQ.faithful}, and \lean{IVQuery.visible}. We do
+\emph{not} formalise a concrete query syntax / abstract syntax tree; the faithfulness
+invariant is exactly the semantic fact a conjunctive query enjoys (its value is fixed once the
+relations it mentions are fixed). Consequently ``machine-checked'' here means the
+\emph{semantic} content of each theorem is verified, not that a query language is reflected
+into Lean. Where a result would, on paper, follow from the syntax of conjunctive queries, the
+corresponding Lean statement takes that step as the query's defining invariant; we say so at
+each such point.
+
+\tableofcontents
+
+% ===========================================================================
+\section{The model}\label{sec:model}
+% ===========================================================================
+
+\paragraph{Attributes, tuples, worlds.}
+Fix a universal schema of \emph{attributes} with values in a fixed domain. A \emph{tuple} is a
+total map from attributes to values, and a \emph{world} is a set of tuples (a relation over the
+universal schema). For an attribute set $X$ and tuples $s,t$, write $s =_X t$ for
+\emph{agreement on $X$}: $s(a)=t(a)$ for every $a\in X$. Agreement on $X$ is an equivalence
+relation and is antitone in $X$ (agreement on a larger set implies agreement on a smaller one).
+\inlean{\lean{Tuple}, \lean{World}, \lean{Tuple.AgreeOn} in \lean{Basic.lean}; the
+equivalence and antitonicity facts are \lean{AgreeOn.refl/symm/trans/mono}.}
+
+\paragraph{Interface laws and legality.}
+The interface imposes \emph{cross-world} functional dependencies. A dependency
+$X\to b$ holds across a class of \emph{legal} worlds $\W$ if, for \emph{any} two legal worlds
+$w,w'$ and any tuples $s\in w$, $t\in w'$, agreement on $X$ forces agreement on $b$:
+\[
+  s =_X t \;\Longrightarrow\; s(b)=t(b).
+\]
+This is strictly stronger than an instance-level dependency: it ties the value of $b$ to the
+value of $X$ \emph{uniformly across all legal worlds}, which is what lets the interface
+\emph{determine} attributes rather than merely constrain single instances. A \emph{legality
+structure} is a class of legal worlds $\W$ together with a set $\Sigma$ of such laws that all
+legal worlds satisfy.
+\inlean{\lean{FD}, \lean{FD.HoldsOnPair}, \lean{LegalityStructure} in \lean{Basic.lean}.}
+
+\paragraph{Overlaps, the observable family, observation.}
+The interface exposes a family of \emph{observable schemas} $\ObsFam$ --- closure-augmented
+designated overlaps (and, more generally, local views or resolver outputs). For an attribute
+set $O$ we write $\aug O = \clo{\att O}$ for its closure-augmented schema. Two worlds $w,w'$
+\emph{agree on} a schema $O$, written $\proj w O = \proj{w'} O$, when their $O$-projections
+coincide as sets of $O$-restricted tuples; the \emph{observation} of $w$ is the family
+$\Obs(w)=(\proj w O)_{O\in\ObsFam}$, and $w,w'$ are \emph{observationally equivalent}
+($w\sim w'$) when $\Obs(w)=\Obs(w')$, i.e.\ they agree on every schema in $\ObsFam$.
+\inlean{\lean{World.AgreeOn} and \lean{ObsEquiv} in \lean{Basic.lean}. In the Lean
+development the observable family $\ObsFam$ is the interface's list of designated
+(closure-augmented) overlaps \lean{Interface.augOverlaps}; \lean{World.AgreeOn O w w'} is set
+equality of the $O$-projections (made precise in \S\ref{sec:determinacy}).}
+
+\paragraph{Conjunctive queries, footprint, identifiability.}
+A Boolean conjunctive query $Q$ has a \emph{footprint} $\att Q$ --- the attributes its answer
+can depend on --- and its answer is invariant under agreement on the footprint: if
+$\proj w{\att Q}=\proj{w'}{\att Q}$ then $Q(w)=Q(w')$. $Q$ is \emph{identifiable} under the
+interface when observationally equivalent legal worlds always agree on the answer:
+\[
+  \text{for all legal } w,w':\quad w\sim w' \;\Longrightarrow\; Q(w)=Q(w').
+\]
+\inlean{\lean{BoolCQ} (with the footprint-faithfulness field) in \lean{Basic.lean};
+\lean{Identifiable} in \lean{Identifiability.lean}. As noted above, the footprint-faithfulness
+field is the semantic invariant of a \cq, taken as the query's defining property.}
+
+% ===========================================================================
+\section{Functional-dependency closure and Armstrong entailment}\label{sec:fd}
+% ===========================================================================
+
+\paragraph{The closure operator.}
+For an attribute set $X$, its \emph{closure} $\clo X$ under $\Sigma$ is the least set
+containing $X$ and closed under the laws: if $Y\to b\in\Sigma$ and $Y\subseteq\clo X$ then
+$b\in\clo X$. The closure is \emph{extensive} ($X\subseteq\clo X$), \emph{monotone}
+($X\subseteq Y\Rightarrow\clo X\subseteq\clo Y$), and \emph{idempotent}
+($\clo{\clo X}=\clo X$).
+\inlean{\lean{InClosure}/\lean{fdClosure} with \lean{fdClosure\_extensive},
+\lean{fdClosure\_mono}, \lean{fdClosure\_idem\_le}, \lean{fdClosure\_idem\_ge} in
+\lean{FDClosure.lean}.}
+
+\begin{lemma}[Determinacy under closure]\label{lem:fd-det}
+For every attribute set $X$, all legal worlds $w,w'$, and all tuples $s\in w$, $t\in w'$,
+\[
+  s =_X t \;\Longrightarrow\; s =_{\clo X} t.
+\]
+\end{lemma}
+\begin{proof}
+Induct on the construction of $\clo X$. If $b\in X$ the conclusion is the hypothesis. If
+$b$ enters the closure through a law $Y\to b$ with $Y\subseteq\clo X$, then by the induction
+hypothesis $s =_Y t$; since the law holds across the legal worlds $w,w'$ and $s\in w$,
+$t\in w'$, agreement on $Y$ forces $s(b)=t(b)$. Hence $s =_{\clo X} t$.
+\end{proof}
+\inlean{\lean{fd\_determinacy} in \lean{FDClosure.lean} (with corollaries
+\lean{fdClosure\_propagates\_agreement} lifting it from a single attribute to the whole
+closure).}
+
+\begin{theorem}[Armstrong soundness and completeness]\label{thm:armstrong}
+For attribute sets $X$ and a single attribute $a$, the law $X\to a$ is entailed by $\Sigma$
+(holds in every legality structure satisfying $\Sigma$) \emph{iff} $a\in\clo X$.
+\end{theorem}
+\begin{proof}
+\emph{Soundness} ($a\in\clo X\Rightarrow$ entailed): immediate from
+Lemma~\ref{lem:fd-det}, which already shows $s=_X t \Rightarrow s(a)=t(a)$ for any legality
+structure satisfying $\Sigma$.
+
+\emph{Completeness} ($\text{entailed}\Rightarrow a\in\clo X$): contrapositive. If
+$a\notin\clo X$, build a \emph{canonical} two-tuple legality structure that satisfies $\Sigma$
+but violates $X\to a$: take two tuples that agree exactly on $\clo X$ and differ on every
+attribute outside it. This pair satisfies every law of $\Sigma$ (a law $Y\to b$ with the
+tuples agreeing on $Y$ forces $Y\subseteq\clo X$, hence $b\in\clo X$, hence agreement on $b$),
+yet they agree on $X$ and disagree on $a\notin\clo X$. So $X\to a$ is not entailed.
+\end{proof}
+\inlean{\lean{fdClosure\_sound} and \lean{fdClosure\_complete} in \lean{FDClosure.lean}; the
+canonical separating structure is \lean{canonStruct}.}
+
+% ===========================================================================
+\section{The closure certificate}\label{sec:cert}
+% ===========================================================================
+
+The first sufficient condition for identifiability covers a query whose entire footprint is
+captured by the closure of a single observable overlap.
+
+\begin{lemma}[Footprint lifting]\label{lem:footprint-lift}
+Let $O$ be an attribute set and $Q$ a query with $\att Q\subseteq\clo O$. For all legal
+worlds $w,w'$ and tuples $s\in w$, $t\in w'$, if $s =_O t$ then $s =_{\att Q} t$.
+\end{lemma}
+\begin{proof}
+By Lemma~\ref{lem:fd-det}, $s =_O t$ gives $s =_{\clo O} t$; antitonicity of agreement and
+$\att Q\subseteq\clo O$ give $s =_{\att Q} t$.
+\end{proof}
+\inlean{\lean{footprint\_lifting} in \lean{Certificate.lean}.}
+
+\begin{theorem}[Closure certificate]\label{thm:cert}
+If $\att Q\subseteq\clo O$ for some observable overlap $O\in\ObsFam$, then $Q$ is identifiable.
+\end{theorem}
+\begin{proof}
+Let $w,w'$ be legal with $w\sim w'$. Since $O\in\ObsFam$, observation equivalence gives
+$\proj w O=\proj{w'} O$: every tuple of $w$ has a tuple of $w'$ agreeing on $O$, and
+vice versa. Take $s\in w$; pick the matching $t\in w'$ with $s =_O t$. By
+Lemma~\ref{lem:footprint-lift}, $s =_{\att Q} t$. Symmetrically every tuple of $w'$ has a
+footprint-agreeing partner in $w$. Hence $\proj w{\att Q}=\proj{w'}{\att Q}$, and footprint
+faithfulness yields $Q(w)=Q(w')$.
+\end{proof}
+\inlean{\lean{certificate\_sufficiency} in \lean{Certificate.lean}. The ``fully grounded''
+variant, where every part of the query is grounded in some overlap, is
+\lean{fully\_grounded\_identifiable}/\lean{hasCertificate\_identifiable}.}
+
+\begin{remark}[The certificate is sufficient, not necessary]\label{rem:necessity-false}
+The converse fails: an identifiable query need not have its footprint inside any single
+closure. The Lean development exhibits a machine-checked counterexample --- a degenerate
+single-world interface in which every query is vacuously identifiable while the closure
+condition fails. Necessity holds only under an additional richness (``closure-separability'')
+assumption on the legal class, which is not assumed here.
+\inlean{\lean{certificate\_necessity\_false} in \lean{Certificate.lean}.}
+\end{remark}
+
+% ===========================================================================
+\section{The atom-wise closure certificate}\label{sec:atom}
+% ===========================================================================
+
+The closure certificate of \S\ref{sec:cert} asks the \emph{whole} footprint to sit inside one
+overlap. The atom-wise certificate is sharper: it covers a query \emph{atom by atom}, allowing
+different atoms to be grounded in different overlaps. This is the right granularity, because
+covering a query's attributes \emph{separately} is not enough.
+
+A conjunctive query is presented by its relation-atom schemas $U_1,\dots,U_m$ together with an
+answer that depends only on the per-atom projections.
+
+\begin{lemma}[Atom footprint]\label{lem:cq-footprint}
+Let $Q$ have atom schemas $U_1,\dots,U_m$. If legal worlds $w,w'$ satisfy
+$\proj w{U_j}=\proj{w'}{U_j}$ for every $j$, then $Q(w)=Q(w')$.
+\end{lemma}
+\begin{proof}
+The interpretation of every relation symbol occurring in $Q$ is fixed by the per-atom
+projections; agreeing on all of them makes the two induced structures interpret $Q$
+identically, so set-semantics evaluation gives the same answer. (In the formalisation this is
+the query's defining per-atom faithfulness invariant.)
+\end{proof}
+\inlean{\lean{cq\_footprint} (the field \lean{AtomCQ.faithful}) in \lean{AtomCertificate.lean}.}
+
+\begin{theorem}[Atom-wise closure certificate]\label{thm:atomwise}
+If for every atom $U_j$ there is an observable overlap $O_j\in\ObsFam$ with
+$\att{U_j}\subseteq\clo{O_j}$, then $Q$ is identifiable.
+\end{theorem}
+\begin{proof}
+Let $w,w'$ be legal with $w\sim w'$. Fix an atom $U_j$ and its overlap $O_j$. Observation
+equivalence gives $\proj w{O_j}=\proj{w'}{O_j}$, and the lifting argument of
+Lemma~\ref{lem:footprint-lift} (now with $\att{U_j}\subseteq\clo{O_j}$) upgrades this to
+$\proj w{U_j}=\proj{w'}{U_j}$: each tuple of $w$ has an $O_j$-agreeing partner in $w'$, which
+by Lemma~\ref{lem:fd-det} agrees on $\clo{O_j}\supseteq\att{U_j}$, and conversely. As this
+holds for every atom, Lemma~\ref{lem:cq-footprint} yields $Q(w)=Q(w')$.
+\end{proof}
+\inlean{\lean{atomwise\_certificate} in \lean{AtomCertificate.lean}; the per-overlap lifting
+step is \lean{agreeOn\_lift}. The single-overlap certificate (Theorem~\ref{thm:cert}) is the
+one-atom case. This declaration depends on no axioms.}
+
+\begin{theorem}[Union-of-footprint coverage is insufficient]\label{thm:union-false}
+It is \emph{not} the case that ``$\att Q\subseteq\clo{\bigcup_{O\in\ObsFam}\att O}$ implies
+$Q$ identifiable.'' That is, covering the footprint by the closure of the \emph{union} of the
+overlaps does not suffice.
+\end{theorem}
+\begin{proof}
+Counterexample. Take two overlaps $\{0\}$ and $\{1\}$, no laws, and the two worlds
+\[
+  w_A=\{(0,0),(1,1)\},\qquad w_B=\{(0,1),(1,0)\}
+\]
+(pairs written as $(\text{attr}_0,\text{attr}_1)$). Their projections onto $\{0\}$ are both
+$\{0,1\}$, and likewise onto $\{1\}$, so $w_A\sim w_B$. The query ``some tuple has
+$\text{attr}_0=\text{attr}_1$'' is true on $w_A$ (e.g.\ $(0,0)$) and false on $w_B$, although
+its footprint $\{0,1\}$ lies in the closure of the union $\{0\}\cup\{1\}$. Hence the union
+condition does not imply identifiability.
+\end{proof}
+\inlean{\lean{union\_footprint\_coverage\_insufficient} in \lean{InterfaceVisible.lean}.
+This refutes the flat union-of-footprint heuristic only; it is consistent with both the
+atom-wise certificate (the offending atom $\{0,1\}$ lies in \emph{no} single overlap) and the
+interface-visible fragment below.}
+
+% ===========================================================================
+\section{The interface-visible fragment}\label{sec:iv}
+% ===========================================================================
+
+A complementary, exact fragment is obtained by building queries directly from the observation.
+For each observable schema $H\in\ObsFam$ introduce a predicate $R_H$ interpreted on $w$ as the
+projection $\proj w H$; the \emph{interface-visible vocabulary} $\mathcal L_{\mathrm{iv}}$
+consists of these base predicates together with derived predicates, each defined by a
+conjunctive query over the $R_H$. A conjunctive query is \emph{interface-visible} when every
+relation symbol it uses belongs to $\mathcal L_{\mathrm{iv}}$.
+
+\begin{theorem}[Interface-visible fragment is identifiable]\label{thm:iv}
+Every interface-visible conjunctive query is identifiable.
+\end{theorem}
+\begin{proof}
+Let $w\sim w'$ be legal. For each base symbol $R_H$, observation equivalence gives
+$\proj w H=\proj{w'} H$, so the two structures interpret $R_H$ identically. Each derived
+symbol is computed by a fixed query over the base symbols, hence is also interpreted
+identically. Thus the two structures agree on every symbol the query mentions, and
+set-semantics evaluation gives $Q(w)=Q(w')$.
+\end{proof}
+\inlean{\lean{iv\_identifiable} (with the query model \lean{IVQuery}, whose \lean{visible}
+field records that the answer is fixed by the observable projections) in
+\lean{Determinacy.lean}. Unlike the closure certificate this needs no legality assumption ---
+the symbols are fixed by the observation outright --- and it permits joins \emph{across}
+overlaps, provided they are expressed over the observable $R_H$ relations rather than over raw
+attributes spanning overlaps (the case Theorem~\ref{thm:union-false} rules out).}
+
+% ===========================================================================
+\section{Identifiability is query determinacy}\label{sec:determinacy}
+% ===========================================================================
+
+Identifiability coincides exactly with \emph{query determinacy} (in the sense of
+Nash--Segoufin--Vianu) by the overlap-projection views. Define the $O$-projection view of a
+world by $\mathrm{view}_O(w)=\{\,t : \exists s\in w,\ s=_O t\,\}$.
+
+\begin{lemma}[Views vs.\ agreement]\label{lem:view-agree}
+$\mathrm{view}_O(w)=\mathrm{view}_O(w')$ if and only if $\proj w O=\proj{w'} O$ (the two
+worlds agree on $O$).
+\end{lemma}
+\begin{proof}
+($\Leftarrow$) If the worlds agree on $O$ and $t\in\mathrm{view}_O(w)$ via $s\in w$ with
+$s=_O t$, then $s$ has an $O$-agreeing partner $u\in w'$, and $u=_O t$ by transitivity, so
+$t\in\mathrm{view}_O(w')$; symmetrically. ($\Rightarrow$) For $s\in w$ we have
+$s\in\mathrm{view}_O(w)$ (reflexivity), hence $s\in\mathrm{view}_O(w')$, giving a partner
+$u\in w'$ with $u=_O s$; symmetrically. Thus the worlds agree on $O$.
+\end{proof}
+\inlean{\lean{projView} and \lean{projView\_eq\_iff\_agreeOn} in \lean{Determinacy.lean}.}
+
+\begin{theorem}[Determinacy characterisation]\label{thm:det}
+A query is identifiable under the interface if and only if it is determined, in the
+determinacy sense, by the overlap-projection views: every two legal worlds with equal views
+agree on the answer.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:view-agree}, equality of all overlap-projection views is the same relation
+as observation equivalence. Identifiability is precisely ``observationally equivalent legal
+worlds agree on the answer,'' which is exactly determinacy by those views.
+\end{proof}
+\inlean{\lean{DeterminedBy} and \lean{identifiable\_iff\_determined} in
+\lean{Determinacy.lean}.}
+
+% ===========================================================================
+\section{The minimax error floor}\label{sec:minimax}
+% ===========================================================================
+
+Identifiability is also exactly the line below which no observation-based predictor can do
+better than chance.
+
+\begin{theorem}[Minimax floor]\label{thm:minimax}
+Let $Q$ be \emph{non}-identifiable, witnessed by legal $w\sim w'$ with $Q(w)\neq Q(w')$, and
+let $f$ be any classifier that depends only on the observation (so $f(w)=f(w')$ whenever
+$w\sim w'$). Then $f$ misclassifies at least one of $w,w'$: there is a legal world on which
+$f$'s prediction is wrong.
+\end{theorem}
+\begin{proof}
+Because $f$ is observation-based and $w\sim w'$, we have $f(w)=f(w')$. But $Q(w)\neq Q(w')$,
+so $f$'s single shared prediction cannot match both answers; it is wrong on at least one of
+the two legal worlds. Averaged over the witness pair this is an error rate of at least
+$\tfrac12$.
+\end{proof}
+\inlean{\lean{minimax\_error\_floor} in \lean{Minimax.lean} (with
+\lean{not\_perfect\_balanced\_accuracy}); ``observation-based'' is \lean{ObsDetermined}.}
+
+% ===========================================================================
+\section{Robustness: a zero-discrepancy threshold}\label{sec:robust}
+% ===========================================================================
+
+The certificates are exact: zero overlap loss forces exact agreement on certified queries.
+We show a quantitative refinement --- a \emph{small} loss already forces exact agreement ---
+when prediction quality is measured by Jensen--Shannon divergence. All divergences use natural
+logarithms ($\kappa=1$).
+
+For finite mass functions $p,q$, the Kullback--Leibler and Jensen--Shannon divergences are
+\[
+  \KL(p\,\|\,q)=\sum_a p(a)\log\frac{p(a)}{q(a)},
+  \qquad
+  \JS(p\,\|\,q)=\tfrac12\KL(p\,\|\,m)+\tfrac12\KL(q\,\|\,m),\quad m=\tfrac{p+q}{2}.
+\]
+Write $\delta_x$ for the point mass at $x$.
+
+\begin{lemma}[Gibbs' inequality]\label{lem:gibbs}
+For mass functions $p,q$ with $q(a)>0$ whenever $p(a)\neq 0$, $\KL(p\,\|\,q)\ge 0$.
+\end{lemma}
+\begin{proof}
+Using $\log z\le z-1$ for $z>0$, for each $a$ with $p(a)>0$,
+$p(a)\log\frac{q(a)}{p(a)}\le p(a)\big(\frac{q(a)}{p(a)}-1\big)=q(a)-p(a)$; the inequality also
+holds trivially when $p(a)=0$ (left side $0\le q(a)$). Summing,
+$\sum_a p(a)\log\frac{q(a)}{p(a)}\le\sum_a(q(a)-p(a))=1-1=0$, and $\KL(p\,\|\,q)$ is the
+negation of the left-hand side, hence $\ge 0$.
+\end{proof}
+\inlean{\lean{kl\_nonneg} in \lean{Information.lean}.}
+
+\begin{lemma}[Point-mass lower bound]\label{lem:js-point}
+For a mass function $p$ and any $x$, $\ \JS(\delta_x\,\|\,p)\ \ge\ \tfrac12\log\!\frac{2}{1+p(x)}$.
+\end{lemma}
+\begin{proof}
+With $m=\tfrac12(\delta_x+p)$ we have $m(x)=\tfrac{1+p(x)}2$, and
+$\KL(\delta_x\,\|\,m)=\log\frac1{m(x)}=\log\frac{2}{1+p(x)}$. By Lemma~\ref{lem:gibbs},
+$\KL(p\,\|\,m)\ge0$, so
+$\JS(\delta_x\,\|\,p)\ge\tfrac12\KL(\delta_x\,\|\,m)=\tfrac12\log\frac2{1+p(x)}$.
+\end{proof}
+\inlean{\lean{kl\_dirac\_mix} and \lean{jsdiv\_dirac\_lower} in \lean{Information.lean}.}
+
+\begin{lemma}[Mass concentration]\label{lem:mass}
+If $\JS(\delta_x\,\|\,p)\le\gamma$ with $\gamma<\tfrac18$, then $p(x)>\tfrac12$.
+\end{lemma}
+\begin{proof}
+By Lemma~\ref{lem:js-point}, $\tfrac12\log\frac2{1+p(x)}\le\gamma$, so
+$\frac2{1+p(x)}\le e^{2\gamma}$ and $1+p(x)\ge 2e^{-2\gamma}$. Using $e^{-t}\ge 1-t$,
+$1+p(x)\ge 2(1-2\gamma)$, i.e.\ $p(x)\ge 1-4\gamma$. As $\gamma<\tfrac18$, $p(x)>\tfrac12$.
+(Avoiding the usual $\sqrt{\cdot}$ Pinsker step keeps the bound elementary.)
+\end{proof}
+\inlean{\lean{px\_gt\_half} in \lean{Information.lean}.}
+
+\begin{lemma}[Unique majority / unique mode]\label{lem:mode}
+A finite mass function has at most one outcome of mass $>\tfrac12$. Consequently, if
+$\JS(\delta_x\,\|\,p)\le\gamma$ and $\JS(\delta_{x'}\,\|\,p)\le\gamma$ with $\gamma<\tfrac18$,
+then $x=x'$.
+\end{lemma}
+\begin{proof}
+If $x\neq x'$ both had mass $>\tfrac12$, then $p(x)+p(x')>1$, contradicting $\sum_a p(a)=1$.
+The second statement applies Lemma~\ref{lem:mass} to $x$ and $x'$.
+\end{proof}
+\inlean{\lean{unique\_majority} and \lean{js\_mode} in \lean{Information.lean}.}
+
+\begin{theorem}[Robust threshold]\label{thm:robust}
+Suppose the overlap projection $\mathrm{proj}(w)$ of a world (its value on a closure-augmented
+overlap $\aug O$) covers the query's footprint, in the sense that
+$\mathrm{proj}(w)=\mathrm{proj}(w')\Rightarrow Q(w)=Q(w')$, and that the overlap loss is
+anchored to a fixed reference $p_O$: $\ \eta\cdot\JS(\delta_{\mathrm{proj}(w)}\,\|\,p_O)\le
+\ell(w)$ with $\eta>0$. Let $\varepsilon_0=\eta/8$. Then for every $\varepsilon<\varepsilon_0$,
+$Q$ is $(\varepsilon,0)$-identifiable: any two worlds with loss $\le\varepsilon$ give the same
+answer.
+\end{theorem}
+\begin{proof}
+If $\ell(w),\ell(w')\le\varepsilon<\eta/8$, anchoring gives
+$\JS(\delta_{\mathrm{proj}(w)}\,\|\,p_O)\le\varepsilon/\eta<\tfrac18$ and likewise for $w'$. By
+Lemma~\ref{lem:mode}, $\mathrm{proj}(w)=\mathrm{proj}(w')$, and footprint coverage yields
+$Q(w)=Q(w')$.
+\end{proof}
+\inlean{\lean{robust\_threshold} in \lean{Information.lean}. The footprint-coverage hypothesis
+is the abstract counterpart of ``$\att Q\subseteq\aug O$'' (Theorem~\ref{thm:cert}); the
+anchoring hypothesis models the overlap-anchored loss term.}
+
+% ===========================================================================
+\section{Information-theoretic lower bounds}\label{sec:info}
+% ===========================================================================
+
+\paragraph{Capacity and outcome bounds.}
+Let $m_Q$ be the \emph{outcome multiplicity} of $Q$ --- the number of distinct answers it
+realises over the legal worlds.
+
+\begin{theorem}[Outcome lower bound]\label{thm:outcome}
+Any predictor that reads the observation, stores it in a representation with at most $2^k$
+states, and answers $Q$ correctly on every legal world satisfies $m_Q\le 2^k$ (equivalently
+$k\ge\log_2 m_Q$).
+\end{theorem}
+\begin{proof}
+Write the predictor as a representation map $\mathrm{rep}$ into a set $R$ with $|R|\le 2^k$,
+followed by a decoder $\mathrm{ans}:R\to\text{answers}$, correct in the sense
+$\mathrm{ans}(\mathrm{rep}(w))=Q(w)$ for every legal $w$. Then the realised answers are
+$\{Q(w)\}=\{\mathrm{ans}(\mathrm{rep}(w))\}\subseteq\mathrm{range}(\mathrm{ans})$, a set of size
+$\le|R|\le 2^k$. Hence $m_Q\le 2^k$.
+\end{proof}
+\inlean{\lean{outcome\_lower\_bound} in \lean{OutcomeBound.lean}.}
+
+\begin{theorem}[Capacity error bound]\label{thm:capacity}
+Index the $m_Q$ distinct outcomes by a set on which the true answer is injective. Any
+$\le 2^k$-state predictor errs on at least $m_Q-2^k$ of them; under a uniform prior its error
+satisfies $P_e\ge 1-2^k/m_Q$.
+\end{theorem}
+\begin{proof}
+On the set of correctly-answered outcomes the representation map is injective (two correctly
+answered, distinct-outcome worlds with the same representation would force equal answers, hence
+equal outcomes), so at most $|R|\le 2^k$ are correct; the remaining $\ge m_Q-2^k$ are errors.
+Dividing by $m_Q$ gives $P_e\ge 1-2^k/m_Q$.
+\end{proof}
+\inlean{\lean{capacity\_error\_bound} and \lean{capacity\_error\_rate} in \lean{OutcomeBound.lean}.}
+
+\paragraph{Fano's inequality.}
+Write $\nml(x)=-x\log x$ and entropy $H(p)=\sum_a\nml(p(a))$ (nats); the binary entropy is
+$\binent(p)=\nml(p)+\nml(1-p)$.
+
+\begin{lemma}[Basic entropy facts]\label{lem:entropy-basic}
+For a mass function on an $M$-element set: $H\ge 0$; $H(\text{uniform})=\log M$; and
+$H(p)\le\log M$ (maximum entropy).
+\end{lemma}
+\begin{proof}
+$\nml\ge0$ on $[0,1]$, so $H\ge0$. For the uniform law each term is $\nml(1/M)=\frac1M\log M$,
+summing to $\log M$. Maximum entropy is $\KL(p\,\|\,\text{uniform})\ge0$
+(Lemma~\ref{lem:gibbs}): expanding, $\KL(p\,\|\,\text{uniform})=\log M-H(p)$.
+\end{proof}
+\inlean{\lean{entropy\_nonneg}, \lean{entropy\_uniform}, \lean{entropy\_le\_log\_card} in
+\lean{Entropy.lean}.}
+
+\begin{lemma}[Superadditivity and the max-entropy-with-total bound]\label{lem:superadd}
+$\nml$ is superadditive on nonnegatives: $\nml(x+y)\le\nml(x)+\nml(y)$. Hence joint entropy
+dominates a marginal, $H(\text{marginal})\le H(\text{joint})$; and for nonnegatives
+$a_1,\dots,a_N$ with sum $S$, $\ \sum_i\nml(a_i)\le\nml(S)+S\log N$.
+\end{lemma}
+\begin{proof}
+For $x,y>0$, since $0<x,y\le x+y$ and $\log$ is increasing,
+$x\log x+y\log y\le x\log(x+y)+y\log(x+y)=(x+y)\log(x+y)$, which is
+$\nml(x+y)\le\nml(x)+\nml(y)$ (boundary cases $x=0$ or $y=0$ are immediate). Summing
+row-wise gives $H(\text{marginal})\le H(\text{joint})$. The last bound is Jensen for the
+concave $\nml$ with uniform weights: $\frac1N\sum_i\nml(a_i)\le\nml(\frac SN)$, and
+$N\,\nml(\frac SN)=\nml(S)+S\log N$.
+\end{proof}
+\inlean{\lean{negMulLog\_add\_le}, \lean{entropy\_marginalX\_le}/\lean{condEntropy\_nonneg},
+\lean{negMulLog\_sum\_le\_total} in \lean{Entropy.lean}.}
+
+\begin{theorem}[Fano's inequality]\label{thm:fano}
+Let $q$ be a mass function on an $M$-element set with a distinguished outcome $x_0$, and write
+$p=1-q(x_0)$ for the residual (``error'') mass. Then
+$\ H(q)\le\binent(p)+p\log(M-1)$.
+\end{theorem}
+\begin{proof}
+Split off $x_0$: $H(q)=\nml(q(x_0))+\sum_{a\neq x_0}\nml(q(a))$. The residual mass is
+$\sum_{a\neq x_0}q(a)=p$ over $M-1$ outcomes, so by the max-entropy-with-total bound
+(Lemma~\ref{lem:superadd}), $\sum_{a\neq x_0}\nml(q(a))\le\nml(p)+p\log(M-1)$. Therefore
+$H(q)\le\nml(q(x_0))+\nml(p)+p\log(M-1)=\nml(1-p)+\nml(p)+p\log(M-1)
+=\binent(p)+p\log(M-1)$.
+\end{proof}
+\inlean{\lean{entropy\_le\_fano} (with \lean{binEntropy\_eq\_negMulLog}) in \lean{Entropy.lean}.}
+
+\begin{remark}[Distributional predictor corollary --- open]\label{rem:fano-open}
+The verbatim entropic predictor bound $P_e\ge 1-\frac{I(Q;\mathrm{Obs})+1}{\log_2 m_Q}$, the
+conditional/averaged lift of Theorem~\ref{thm:fano} over a joint distribution, is \emph{not}
+formalised. Its operational content (interface capacity forces an error floor) is the proved
+Theorem~\ref{thm:capacity}.
+\end{remark}
+
+% ===========================================================================
+\section{Minimum augmentation}\label{sec:minaug}
+% ===========================================================================
+
+When a query is not certified, one seeks the smallest \emph{augmentation} --- extra attributes
+added to an overlap --- whose closure covers the footprint. Say $\mathit{aug}$ is an
+\emph{augmentation certificate} for $Q$ on overlap $O$ when $\att Q\subseteq\clo{O\cup
+\mathit{aug}}$.
+
+\begin{proposition}[Structure of augmentation certificates]\label{prop:aug}
+Augmentation certificates are monotone (if $\mathit{aug}_1\subseteq\mathit{aug}_2$ certifies,
+so does $\mathit{aug}_2$); certification depends only on the closure $\clo{O\cup\mathit{aug}}$;
+and $\mathit{aug}$ certifies $Q$ iff it covers the \emph{residual}
+$\{a\in\att Q : a\notin\clo O\}$. Moreover, adding $\mathit{aug}$ to the interface (making
+$O\cup\mathit{aug}$ an observable overlap) renders $Q$ identifiable \emph{under the augmented
+interface}.
+\end{proposition}
+\begin{proof}
+Monotonicity and closure-dependence are immediate from monotonicity and idempotence of $\clo
+\cdot$. The residual characterisation splits $\att Q$ into the part already in $\clo O$ and the
+rest. Identifiability under the augmented interface is Theorem~\ref{thm:cert} applied to the
+overlap $O\cup\mathit{aug}$ in the augmented interface.
+\end{proof}
+\inlean{\lean{augCertificate\_mono}, \lean{augCertificate\_closure\_char},
+\lean{augCertificate\_iff\_covers\_residual}, \lean{aug\_closure\_equiv},
+\lean{augCertificate\_identifiable\_augmented} in \lean{MinAug.lean}.}
+
+\begin{remark}[Closure-uniqueness of minimum augmentations is false]\label{rem:minaug-false}
+Two minimum-cardinality augmentations need not have the same closure (minimum set covers are
+not unique). The development records a machine-checked counterexample.
+\inlean{\lean{minAug\_closure\_unique\_false} in \lean{MinAug.lean}.}
+\end{remark}
+
+\begin{remark}[Greedy approximation and hardness --- open]\label{rem:greedy-open}
+Selecting a minimum augmentation reduces to \textsc{Set Cover}, so the greedy algorithm enjoys
+the standard $H_k\le 1+\ln k$ approximation guarantee and the decision problem is NP-complete.
+These two facts are \emph{not} machine-checked: they require a formal \textsc{Set
+Cover}/greedy development and an NP-completeness framework outside the present scope. This is
+the single remaining \texttt{sorry} (\lean{greedy\_approx\_ratio}) together with the placeholder
+\lean{minAug\_NP\_hard\_from\_SetCover}.
+\end{remark}
+
+% ===========================================================================
+\appendix
+\section{Declaration index}\label{app:index}
+% ===========================================================================
+
+Each result above with its Lean declaration and module. ``--- (open)'' marks the one
+unproved item.
+
+\begin{center}\small
+\begin{tabular}{lll}
+\hline
+\textbf{Result} & \textbf{Lean declaration} & \textbf{Module} \\
+\hline
+Determinacy under closure (Lem.~\ref{lem:fd-det})   & \lean{fd\_determinacy}            & \lean{FDClosure} \\
+Armstrong (Thm.~\ref{thm:armstrong})                & \lean{fdClosure\_sound/\_complete}& \lean{FDClosure} \\
+Footprint lifting (Lem.~\ref{lem:footprint-lift})   & \lean{footprint\_lifting}        & \lean{Certificate} \\
+Closure certificate (Thm.~\ref{thm:cert})           & \lean{certificate\_sufficiency}  & \lean{Certificate} \\
+Necessity is false (Rem.~\ref{rem:necessity-false}) & \lean{certificate\_necessity\_false} & \lean{Certificate} \\
+Atom footprint (Lem.~\ref{lem:cq-footprint})        & \lean{cq\_footprint}             & \lean{AtomCertificate} \\
+Atom-wise certificate (Thm.~\ref{thm:atomwise})     & \lean{atomwise\_certificate}     & \lean{AtomCertificate} \\
+Union coverage false (Thm.~\ref{thm:union-false})   & \lean{union\_footprint\_coverage\_insufficient} & \lean{InterfaceVisible} \\
+Interface-visible (Thm.~\ref{thm:iv})               & \lean{iv\_identifiable}          & \lean{Determinacy} \\
+Determinacy char. (Thm.~\ref{thm:det})              & \lean{identifiable\_iff\_determined} & \lean{Determinacy} \\
+Minimax floor (Thm.~\ref{thm:minimax})              & \lean{minimax\_error\_floor}     & \lean{Minimax} \\
+Gibbs (Lem.~\ref{lem:gibbs})                        & \lean{kl\_nonneg}                & \lean{Information} \\
+Unique mode (Lem.~\ref{lem:mode})                   & \lean{js\_mode}                  & \lean{Information} \\
+Robust threshold (Thm.~\ref{thm:robust})            & \lean{robust\_threshold}         & \lean{Information} \\
+Outcome bound (Thm.~\ref{thm:outcome})              & \lean{outcome\_lower\_bound}     & \lean{OutcomeBound} \\
+Capacity bound (Thm.~\ref{thm:capacity})            & \lean{capacity\_error\_bound}    & \lean{OutcomeBound} \\
+Fano's inequality (Thm.~\ref{thm:fano})             & \lean{entropy\_le\_fano}         & \lean{Entropy} \\
+Augmentation structure (Prop.~\ref{prop:aug})       & \lean{augCertificate\_*}         & \lean{MinAug} \\
+Greedy/NP-hardness                                  & \lean{greedy\_approx\_ratio} --- (open) & \lean{MinAug} \\
+\hline
+\end{tabular}
+\end{center}
+
+\section*{Reproducing the proofs}
+\addcontentsline{toc}{section}{Reproducing the proofs}
+The toolchain is pinned by \texttt{lean-toolchain} (Lean~4.30.0) and dependencies by
+\texttt{lake-manifest.json} (Mathlib~v4.30.0). From the repository root:
+\texttt{lake exe cache get} (fetch prebuilt Mathlib) then \texttt{lake build}. A successful
+build reports only the one documented \texttt{sorry} (\lean{greedy\_approx\_ratio}) and
+unused-variable linter warnings. Declaration names in this report are checked against the
+sources in CI.
+
+\end{document}

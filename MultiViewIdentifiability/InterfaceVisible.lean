@@ -60,10 +60,12 @@ The naive generalization — `Q.footprint ⊆ fdClosure Σ (⋃ⱼ Ω̃ⱼ)` ⇒
 single tuple agreeing on the whole union. So a query coupling attributes from different
 overlaps can differ on obs-equivalent worlds.
 
-This is exactly why identifiability is characterised for *interface-visible*
-queries — queries expressible over the separate `R_{Ω̃ⱼ}` predicates — not for arbitrary
-footprints over the union. The provable content is the single-overlap result
-`singleOverlap_identifiable` / `footprint_in_overlap_identifiable` above.
+What is refuted here is the flat *union-of-footprint* heuristic — **not** the interface-visible
+result. Queries expressed over the observable `R_{Ω̃ⱼ}` predicates *are* identifiable
+(`iv_identifiable`), and a footprint inside a single overlap is too
+(`singleOverlap_identifiable` / `footprint_in_overlap_identifiable`). The failure is specific
+to covering a footprint by the *union* of overlaps when an atom couples attributes drawn from
+different overlaps.
 
 The classic counterexample: overlaps `{0}`, `{1}`, no FDs, with
 `wA = {(0,0),(1,1)}` and `wB = {(0,1),(1,0)}`. Their projections on `{0}` and on `{1}`
@@ -149,7 +151,7 @@ theorem cexIV_obsequiv : ObsEquiv cexIV.augOverlaps wA wB := by
 
 /-- **The general (union-overlap) form is false.** There is an interface and a query with
     `Q.footprint ⊆ fdClosure Σ (⋃ⱼ Ω̃ⱼ)` that is nonetheless not identifiable. -/
-theorem interface_visible_identifiable_false :
+theorem union_footprint_coverage_insufficient :
     ¬ ∀ (I : Interface) (Q : BoolCQ),
         Q.footprint ⊆ fdClosure I.fds (AttrSet.unionList I.augOverlaps) → Identifiable I Q := by
   intro h

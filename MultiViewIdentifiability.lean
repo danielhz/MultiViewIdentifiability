@@ -2,6 +2,7 @@ import MultiViewIdentifiability.Basic
 import MultiViewIdentifiability.FDClosure
 import MultiViewIdentifiability.Identifiability
 import MultiViewIdentifiability.Certificate
+import MultiViewIdentifiability.AtomCertificate
 import MultiViewIdentifiability.Minimax
 import MultiViewIdentifiability.InterfaceVisible
 import MultiViewIdentifiability.MinAug
@@ -31,6 +32,8 @@ consequences.
                       Armstrong-entailment ⇔ closure-membership correspondence.
 - `Identifiability`:  The interface structure and identifiability, with monotonicity.
 - `Certificate`:      The closure certificate — footprint ⊆ a closed overlap ⇒ identifiable.
+- `AtomCertificate`:  The atom-wise closure certificate — each relation atom inside a single
+                      closed overlap ⇒ identifiable.
 - `Minimax`:          Non-identifiable queries have minimax error floor ≥ 1/2.
 - `InterfaceVisible`: Single-overlap grounded queries are identifiable.
 - `MinAug`:           The minimum-augmentation problem and its monotonicity / closure
@@ -42,7 +45,8 @@ consequences.
 - `Information`:      Finite-distribution KL / Jensen–Shannon divergence and a Pinsker-type
                       unique-mode lemma.
 - `Entropy`:          Finite Shannon entropy and Fano's inequality.
-- `Determinacy`:      Identifiability is query determinacy by the overlap-projection views.
+- `Determinacy`:      Identifiability is query determinacy by the overlap-projection views;
+                      the interface-visible fragment.
 
 ## What is proved (no `sorry`)
 
@@ -53,9 +57,14 @@ consequences.
   `footprint_lifting`, `hasCertificate_identifiable`.
 - `minimax_error_floor`: the 1/2 error floor for non-identifiable queries.
 - `footprint_in_overlap_identifiable`, `singleOverlap_identifiable`: single-overlap cases.
+- `atomwise_certificate` (with `cq_footprint`, `AtomCQ`): a CQ each of whose relation atoms
+  is covered by a single overlap's FD-closure is identifiable (the atom-wise refinement of
+  the closure certificate; the single-overlap case is one atom).
 - `augCertificate_mono`, `augCertificate_closure_char`, `augCertificate_iff_covers_residual`,
   `aug_closure_equiv`, `augCertificate_identifiable_augmented` (identifiability under the
   augmented interface).
+- `iv_identifiable` (with `IVQuery`): every interface-visible query — one whose answer is
+  fixed by the observable-schema projections — is identifiable.
 - `identifiable_iff_determined`: identifiability is exactly query determinacy by the
   overlap-projection views.
 - `outcome_lower_bound`: a correct predictor with a `≤ 2^k`-state representation realises at
@@ -74,7 +83,7 @@ Three natural-looking strengthenings are in fact false; each is refuted with a c
 counterexample:
 - `certificate_necessity_false`: the closure certificate is sufficient but not necessary
   (it fails for a degenerate single-world interface).
-- `interface_visible_identifiable_false`: footprint ⊆ closure(⋃ overlaps) does *not* imply
+- `union_footprint_coverage_insufficient`: footprint ⊆ closure(⋃ overlaps) does *not* imply
   identifiability — observational equivalence gives only per-overlap agreement; the provable
   content is the single-overlap case (`singleOverlap_identifiable`).
 - `minAug_closure_unique_false`: minimum augmentations are not closure-unique (minimum set

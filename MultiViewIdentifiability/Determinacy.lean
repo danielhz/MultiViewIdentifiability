@@ -62,3 +62,33 @@ theorem identifiable_iff_determined (I : Interface) (Q : BoolCQ) :
     obtain ⟨O, hO, rfl⟩ := List.mem_map.mp hv
     rw [projView_eq_iff_agreeOn]
     exact hobs O hO
+
+/-!
+## The interface-visible fragment
+
+A query is **interface-visible** when its answer is determined by the observable-schema
+projections `w|_H` — the interpretations `R_H` of the base view predicates. A query over the
+interface-visible vocabulary `L_iv` is built from these base predicates `R_H` together with
+derived predicates defined by queries over them; since every such symbol is interpreted from
+the observation, the whole query is determined by the observation. Such queries are
+identifiable. (Unlike the closure certificate, this needs no legality assumption: the
+relation symbols are fixed by the observation outright. It also allows joins *across*
+overlaps — provided they are expressed over the observable `R_H` relations, not over raw
+attributes spanning overlaps, which is the case the union-form counterexample rules out.)
+-/
+
+/-- An **interface-visible query**: its answer is determined by the projections `w|_H` onto
+    the observable schemas (the `R_H` interpretations). Models a conjunctive query over the
+    interface-visible vocabulary `L_iv`. -/
+structure IVQuery (I : Interface) where
+  eval    : World → Prop
+  visible : ∀ w w', (∀ H ∈ I.augOverlaps, projView H w = projView H w') → (eval w ↔ eval w')
+
+/-- **The interface-visible fragment is identifiable**: every interface-visible query is
+    identifiable from the interface. -/
+theorem iv_identifiable (I : Interface) (Q : IVQuery I) (w w' : World)
+    (_hw : I.worlds w) (_hw' : I.worlds w') (hobs : ObsEquiv I.augOverlaps w w') :
+    Q.eval w ↔ Q.eval w' := by
+  refine Q.visible w w' ?_
+  intro H hH
+  exact (projView_eq_iff_agreeOn H w w').mpr (hobs H hH)

@@ -6,8 +6,10 @@ Which results in this development are machine-checked, verified against a green 
 | Result | Lean declaration(s) | Status |
 |---|---|---|
 | Closure certificate | `certificate_sufficiency` (`Certificate.lean`) | **Proved.** Sufficient condition for identifiability. Its converse (`Identifiable → FullyGrounded`) is **false**, disproved by `certificate_necessity_false`. |
+| Atom-wise closure certificate | `atomwise_certificate`, `cq_footprint`, `AtomCQ` (`AtomCertificate.lean`) | **Proved** (no axioms). A conjunctive query each of whose relation atoms has its schema inside a single overlap's FD-closure is identifiable. Refines the closure certificate: covering attributes *separately* across overlaps is insufficient; the single-overlap case is one atom. |
 | Determinacy correspondence | `identifiable_iff_determined` (`Determinacy.lean`) | **Proved.** Identifiability equals query determinacy by the overlap-projection views. |
-| Single-overlap identifiability | `footprint_in_overlap_identifiable`, `singleOverlap_identifiable` (`InterfaceVisible.lean`) | **Proved.** The footprint-over-**union** generalization is **false** (`interface_visible_identifiable_false`). |
+| Interface-visible fragment | `iv_identifiable`, `IVQuery` (`Determinacy.lean`) | **Proved.** Any query whose answer is determined by the observable-schema projections (a query over the interface-visible vocabulary) is identifiable — needs no legality assumption, and permits joins over the observable relations. |
+| Single-overlap identifiability | `footprint_in_overlap_identifiable`, `singleOverlap_identifiable` (`InterfaceVisible.lean`) | **Proved.** The footprint-over-**union** generalization is **false** (`union_footprint_coverage_insufficient`). |
 | FD closure / Armstrong | `fd_determinacy`, `fdClosure_sound`, `fdClosure_complete` (`FDClosure.lean`) | **Proved.** Both directions of the Armstrong-entailment ⇔ closure-membership correspondence. |
 | Multi-grounded sufficiency | `fully_grounded_identifiable`, `hasCertificate_identifiable` (`Certificate.lean`) | **Proved.** |
 | Minimax error floor | `minimax_error_floor`, `not_perfect_balanced_accuracy` (`Minimax.lean`) | **Proved.** Error ≥ 1/2 for non-identifiable queries. |
